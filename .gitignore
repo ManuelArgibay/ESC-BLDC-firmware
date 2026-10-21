@@ -1,0 +1,11 @@
+# Code Composer Studio: salidas de compilación y archivos generados
+Debug/
+Release/
+.clangd
+.metadata/
+*.out
+*.map
+*.obj
+
+# macOS
+.DS_Store
