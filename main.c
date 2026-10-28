@@ -1,13 +1,12 @@
 
 #include <stdint.h>
-#include "tm4c123gh6pm"
 
 //System definitions
-#define SYSCTL_RCGCGPIO *((uint32_t *) 0x400FE608) //permite activar /desactivar los modulos GPIO del Run mode
-#define SYSCTL_PRGPIO *((uint32_t *) 0x400FEA08) //indica cuando los modulos estaran listos para ser accedidos por el SW
-#define SYSCTL_RCC *((uint32_t *) 0x400FE060) //este registro controla el clock cuando estamos en run mode
-#define SYSCTL_RCGCPWM *((uint32_t *) 0x400FE640) //registro para activar el clock control para los puertos que tendran PWM
-#define SYSCLK_PRPWM *((uint32_t *) 0x400FA40)  //este registro indica cuando los puertos estaran listos para ser configurados como PWM
+#define SYSCTL_RCGCGPIO *((volatile uint32_t *) 0x400FE608) //permite activar /desactivar los modulos GPIO del Run mode
+#define SYSCTL_PRGPIO *((volatile uint32_t *) 0x400FEA08) //indica cuando los modulos estaran listos para ser accedidos por el SW
+#define SYSCTL_RCC *((volatile uint32_t *) 0x400FE060) //este registro controla el clock cuando estamos en run mode
+#define SYSCTL_RCGCPWM *((volatile uint32_t *) 0x400FE640) //registro para activar el clock control para los puertos que tendran PWM
+#define SYSCTL_PRPWM *((volatile uint32_t *) 0x400FEA40)  //este registro indica cuando los puertos estaran listos para ser configurados como PWM
 
 //Port B
 #define GPIOB_DIR *((uint32_t *) 0x40005400)   //dirección pines (Puerto B)
@@ -42,13 +41,28 @@
 #define GPIOF_PCTL *((uint32_t *) 0x4002552C)  //registro para seleccionar función PWM (Puerto F)
 
 // PWM
+
 #define RCGC0 *((volatile uint32_t *) 0x400FE100)
+#define RCGC2 *((volatile uint32_t *) 0x400FE108)
+#define PWMENABLE *((volatile uint32_t *) 0x40028008)
+
+// PWM0 -> PB7 (M0PWM1)
 #define PWM0CTL *((volatile uint32_t *) 0x40028040)
-#define PWM0GENA *((volatile uint32_t*) 0x40028060)
+#define PWM0LOAD *((volatile uint32_t *) 0x40028050)
 #define PWM0GENB *((volatile uint32_t*) 0x40028064)
 #define PWM0CMPA *((volatile uint32_t*) 0x40028058)
-#define SRPWM *((volatile uint32_t*) 0x400FE540)
-#define PWM0ENABLE *((volatile uint32_t *) 0x40028008)
+
+// PWM1 -> PB5 (M0PWM3)
+#define PWM1CTL *((volatile uint32_t *) 0x40028080)
+#define PWM1LOAD *((volatile uint32_t *) 0x40028090)
+#define PWM1GENB *((volatile uint32_t*) 0x400280A4)
+#define PWM1CMPA *((volatile uint32_t*) 0x40028098)
+
+// PWM2 -> PE4 (M0PWM4)
+#define PWM2CTL *((volatile uint32_t *) 0x400280C0)
+#define PWM2LOAD *((volatile uint32_t *) 0x400280D0)
+#define PWM2GENA *((volatile uint32_t*) 0x400280E0)
+#define PWM2CMPA *((volatile uint32_t*) 0x400280D8)
 
 // ADC 
 #define PE0  0x01 //ADC
@@ -72,6 +86,7 @@
 
 #define PD2 0x04 //BEMF Phase C
 #define PD3 0x08 //BEMF Phase C
+#define PD4 0x10 //BEMF Phase C
 #define PD6 0x40 //BEMF Phase C
 
 #define PE0 0x01 //ADC
@@ -79,17 +94,19 @@
 void init_sys(void)
 {
 
-	//Activamos el Run Mode para los puertos B, E, D, F(los que tendran el PWM que commutara)
-	SYSCTL_RCGCGPIO |= 0x2B;
+	//Activamos el Run Mode para los puertos B, D, E, F (los que tendran el PWM que commutara)
+	//Bits: A=0x01, B=0x02, C=0x04, D=0x08, E=0x10, F=0x20 -> B|D|E|F = 0x3A
+	SYSCTL_RCGCGPIO |= 0x3A;
 
-	//Para poder proseguir, hay que asegurarnos que los puertos estan armados (Ready)
-	while ((SYSCLK_PRGPIO & 0x2B) != 0x2B);
+	//Para poder proseguir, hay que asegurarnos que los puertos estan armados (Ready) -> se lee PRGPIO, no RCGCGPIO
+	while ((SYSCTL_PRGPIO & 0x3A) != 0x3A);
 
-	//Activamos el PWM para los puertos B y E
-	SYSCTL_RCGCPWM |= 0x12;
+	//Activamos el modulo PWM0 (PB5 = M0PWM3, PB7 = M0PWM1, PE4 = M0PWM4 -> todos en el modulo 0)
+	//Bits de RCGCPWM: PWM0 = 0x01, PWM1 = 0x02
+	SYSCTL_RCGCPWM |= 0x01;
 
-	//Para poder proseguir, hay que asegurarnos que los puertos estan armados (Ready)
-	while ((SYSCLK_PRPWM & 0x12) != 0x12);
+	//Para poder proseguir, hay que asegurarnos que el modulo PWM0 esta armado (Ready)
+	while ((SYSCTL_PRPWM & 0x01) == 0);
 
 
 }
@@ -144,19 +161,59 @@ void init_PWM(void)
 {
 	RCGC0 |= 0x00100000;
 	RCGC2 |= 0x00000012;
-	PWM0CTL &= 0xFFFFFFFD;
-	PWM0GENA |= 0x0000000E;
-	PWM0GENB &= 0xFFFFF000;
+
+	//PWM0 -> PB7(PWM0 GENB)
+	PWM0CTL &= 0xFFFFFFFD; // Modo Count-Down
+	PWM0GENB |= 0x0000008C; //PWM1 utiliza el generador B
 	PWM0LOAD = (PWM0LOAD & 0xFFFF0000) | 0x000009C3; // Definido un LOAD de 2499 para un PWM de 32kHz -> 80MHz / 32kHz - 1 = 2499
-	PWM0CTL |= 0x00000001;  // Comienza a funcionar el PWM
+	PWM0CTL |= 0x00000001;  // Comienza a funcionar el PWM0
 
+	// PWM1 PB5(PWM1 GENB)
+	PWM1CTL &= 0xFFFFFFFD; // Modo Count-Down
+	PWM1GENB |= 0x0000008C; //PWM3 utiliza el generador B
+	PWM1LOAD = (PWM1LOAD & 0xFFFF0000) | 0x000009C3; // Definido un LOAD de 2499 para un PWM de 32kHz -> 80MHz / 32kHz - 1 = 2499
+	PWM1CTL |= 0x00000001;  // Comienza a funcionar el PWM1
+	
+	// PWM2 -> PE4(PWM2 GENA)
+	PWM2CTL &= 0xFFFFFFFD; // Modo Count-Down
+	PWM2GENA |= 0x0000008C; //PWM4 utiliza el generador A
+	PWM2LOAD = (PWM2LOAD & 0xFFFF0000) | 0x000009C3; // Definido un LOAD de 2499 para un PWM de 32kHz -> 80MHz / 32kHz - 1 = 2499
+	PWM2CTL |= 0x00000001;  // Comienza a funcionar el PWM2
 }
 
-void PWM(uint32_t compA, uint8_t pwm)
+void PWMB7(uint32_t duty)
+{	
+	if (duty >= 100) 
+	{
+		duty = 99;
+	}
+	uint32_t comparador = 2499 - 2499 * duty / 100; // Este es el valor del comparador
+	PWM0CMPA = (PWM0CMPA & 0xFFFF0000) | comparador; // duty = 0.5 -> 0x000004E1
+	PWMENABLE |= 0x00000002; // PE4 = M0PWM4 = 0x00000010, PB5 = M0PWM3 = 0x00000008, PB7 = M0PWM1 = 0x00000002.
+}
+
+void PWMB5(uint32_t duty)
+{	
+	if (duty >= 100) 
+	{
+		duty = 99;
+	}
+	uint32_t comparador = 2499 - 2499 * duty / 100; // Este es el valor del comparador
+	PWM1CMPA = (PWM1CMPA & 0xFFFF0000) | comparador; // duty = 0.5 -> 0x000004E1
+	PWMENABLE |= 0x00000008; // PE4 = M0PWM4 = 0x00000010, PB5 = M0PWM3 = 0x00000008, PB7 = M0PWM1 = 0x00000002.
+}
+
+void PWME4(uint32_t duty)
 {
-	PWM0CMPA = (PWM0CMPA & 0xFFFF0000) | compA;
-	PWM0ENABLE |= pwm;
+	if (duty >= 100) 
+	{
+		duty = 99;
+	}
+	uint32_t comparador = 2499 - 2499 * duty / 100; // Este es el valor del comparador
+	PWM2CMPA = (PWM2CMPA & 0xFFFF0000) | comparador; // duty = 0.5 -> 0x000004E1
+	PWMENABLE |= 0x00000010; // PE4 = M0PWM4 = 0x00000010, PB5 = M0PWM3 = 0x00000008, PB7 = M0PWM1 = 0x00000002.
 }
+
 
 void init_ADC(void)
 {
@@ -189,6 +246,8 @@ int main(void)
 	init_GPIOs();
 	init_PWM();
 
-	
+	uint32_t duty = 80;
+	PWMB7(duty);
+
 	return 0;
 }
