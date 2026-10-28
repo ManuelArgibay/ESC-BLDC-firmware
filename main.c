@@ -64,15 +64,21 @@
 #define PWM2GENA *((volatile uint32_t*) 0x400280E0)
 #define PWM2CMPA *((volatile uint32_t*) 0x400280D8)
 
-// ADC 
+// ADC init
 #define PE0  0x01 //ADC
-#define SYSCTL_RCGCADC *(uint32_t*) 0x400FE638  // Enable/disable ADC modules from Run Mode
-#define SYSCTL_PRADC *(uint32_t*)   0x400FEA38  // Indica cuando los modulos ADC estan ready para ser leidos por el software
-#define ADC0_ACTSS   *(uint32_t*)   0x40038000
-#define ADC0_EMUX    *(uint32_t*)    0x40038014
-#define ADC0_SSMUX3  *(uint32_t*)    0x400380A0
-#define ADC0_SSCTL3  *(uint32_t*)    0x400380A4
-#define ADC0_ISC     *(uint32_t*)    0x4003800C
+#define SYSCTL_RCGCADC *(volatile uint32_t*) 0x400FE638  // Enable/disable ADC modules from Run Mode
+#define SYSCTL_PRADC *(volatile uint32_t*)   0x400FEA38  // Indica cuando los modulos ADC estan ready para ser leidos por el software
+#define ADC0_ACTSS   *(volatile uint32_t*)   0x40038000
+#define ADC0_EMUX    *(volatile uint32_t*)    0x40038014
+#define ADC0_SSMUX3  *(volatile uint32_t*)    0x400380A0
+#define ADC0_SSCTL3  *(volatile uint32_t*)    0x400380A4
+#define ADC0_ISC     *(volatile uint32_t*)    0x4003800C //limpia (clear) las instrucciones pendientes	
+
+//ADC conversion
+
+#define ADC0_PSSI    (*(volatile uint32_t *)0x40038028)  //inicio de conversion
+#define ADC0_RIS     (*(volatile uint32_t *)0x40038004)  //interrupt status. sirve para indicar cuando ha finalizado la conversión
+#define ADC0_SSFIFO3 (*(volatile uint32_t *)0x400380A8)  //guarda el resultado de la conversion
 
 
 // definimos los pines que mas usaremos
@@ -89,7 +95,7 @@
 #define PD4 0x10 //BEMF Phase C
 #define PD6 0x40 //BEMF Phase C
 
-#define PE0 0x01 //ADC
+volatile uint16_t adc_valor = 0;
 
 void init_sys(void)
 {
@@ -220,8 +226,8 @@ void init_ADC(void)
 	SYSCTL_RCGCADC	|=	 0x01; //habilitamos el reloj del puerto E, donde esta el pin PE0 (Run mode)
 	SYSCTL_RCGCGPIO |=   0x10; //habilitamos el reloj del ADC (Run mode)
 
-    while ((SYSCTL_PRGPIO & 0x01) == 0);  //Esperamos a que el reloj del ADC este ready
-    while ((SYSCTL_PRADC  & 0x10) == 0);  //Esperamos a que el reloj del puerto E este ready
+    while ((SYSCTL_PRGPIO & 0x10) == 0);  //Esperamos a que el reloj del ADC este ready
+    while ((SYSCTL_PRADC  & 0x01	) == 0);  //Esperamos a que el reloj del puerto E este ready
 
 	//Inicializamos GPIO para el ADC
 	GPIOE_DIR   &= ~PE0;
@@ -240,14 +246,36 @@ void init_ADC(void)
 	
 }
 
+uint32_t leer_ADC(void)
+{
+	ADC0_PSSI = 0x08;			//iniciamos la conversion
+
+    while ((ADC0_RIS & 0x08) == 0);	//esperamos a que termine la conversion
+
+    volatile uint32_t valor = ADC0_SSFIFO3 & 0xFFF;	//guardamos el valor de 12 bits guardado en el registro SS3
+
+    ADC0_ISC = 0x08;	
+
+    return valor;
+}
+
+
 int main(void)
 {
+
 	init_sys();
 	init_GPIOs();
 	init_PWM();
+	init_ADC();
 
 	uint32_t duty = 80;
-	PWMB7(duty);
+
+	while(1)
+	{
+		adc_valor = leer_ADC();
+	}
+	
+	//PWMB7(duty);
 
 	return 0;
 }
