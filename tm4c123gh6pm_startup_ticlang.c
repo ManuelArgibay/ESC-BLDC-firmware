@@ -16,6 +16,10 @@ static void IntDefaultHandler(void);
 extern void _c_int00(void);     /* inicialización de C de TI: prepara variables y llama a main() */
 extern uint32_t __STACK_END;    /* fin del stack, lo define el linker */
 
+// Se hace un extern para que se pueda utilizar esta función dentro del main.c
+extern void Timer0AHandler(void);
+extern void Timer1AHandler(void);
+
 #define NUM_VECTORES 155        /* 16 del núcleo + 139 del TM4C123GH6PM */
 
 __attribute__((section(".intvecs"), used))
@@ -32,7 +36,11 @@ void (* const g_pfnVectors[NUM_VECTORES])(void) =
     [12] = IntDefaultHandler,   /* Debug monitor */
     [14] = IntDefaultHandler,   /* PendSV */
     [15] = IntDefaultHandler,   /* SysTick */
-    [16 ... NUM_VECTORES - 1] = IntDefaultHandler  /* Interrupciones de periféricos */
+    [16 ... NUM_VECTORES - 1] = IntDefaultHandler,  /* Interrupciones de periféricos */
+    
+    // Tabla de vectores en la página 104 del datasheet del micro
+    [35] = Timer0AHandler,
+    [37] = Timer1AHandler
 };
 
 void ResetISR(void)
