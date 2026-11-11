@@ -6,7 +6,9 @@ Proyecto de la asignatura *Laboratori de Sistemes Electrònics I* (Grado en Inge
 
 ## Estado actual
 
-El código accede directamente a los registros del microcontrolador (sin TivaWare) y por ahora incluye la inicialización de relojes y GPIO, el generador PWM0 a 32 kHz para las entradas de lado alto de los drivers y el ADC0 (secuenciador SS3) sobre PE0/AIN3 para el potenciómetro. Falta la secuencia de conmutación de seis pasos y el lazo sensorless.
+El código accede directamente a los registros del microcontrolador (sin TivaWare) y el micro funciona con el oscilador interno de 16 MHz, sin PLL. Ya funciona el control en lazo abierto: el Timer 1A, en modo periódico y con interrupción, recorre la secuencia de conmutación de seis pasos, y la frecuencia de conmutación y el duty del PWM son proporcionales a la lectura del potenciómetro, hasta 200 Hz eléctricos. Por debajo de un umbral del ADC el motor se considera parado y se apagan todas las salidas.
+
+Los periféricos usados son el generador PWM0 a 32 kHz para las entradas de lado alto de los drivers, GPIO para las de lado bajo y el ADC0 (secuenciador SS3) sobre PE0/AIN3 para el potenciómetro. Faltan la rampa de arranque con alineación del rotor y el lazo cerrado sensorless con detección de los cruces por cero de la BEMF.
 
 ## Asignación de pines
 
@@ -15,7 +17,7 @@ El código accede directamente a los registros del microcontrolador (sin TivaWar
 | Fase A alto / bajo | PB5 / PD0 | PWM / GPIO hacia el IR2301 A |
 | Fase B alto / bajo | PE4 / PB3 | PWM / GPIO hacia el IR2301 B |
 | Fase C alto / bajo | PB7 / PF2 | PWM / GPIO hacia el IR2301 C |
-| BEMF A / B / C | PD2 / PD3 / PD6 | Entradas desde el LM339 |
+| BEMF A / B / C | PD3 / PD2 / PD6 | Entradas desde el LM339 |
 | Potenciómetro | PE0 (AIN3) | Consigna de velocidad |
 
 ## Cómo abrirlo
