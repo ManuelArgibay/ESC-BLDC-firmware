@@ -1,11 +1,32 @@
 # Code Composer Studio: salidas de compilación y archivos generados
 Debug/
 Release/
-.clangd
 .metadata/
+.launches/
 *.out
 *.map
 *.obj
+*.o
+*.d
+*.lib
+*.a
+*_linkInfo.xml
 
-# macOS
+# Índice de clangd (lo genera el editor de CCS Theia)
+.clangd
+.cache/
+
+# Copias de seguridad y temporales
+*.bak
+*.bak_*
+*.orig
+*~
+*.swp
+
+# Configuración local de editores
+.vscode/
+.theia/
+
+# macOS / Windows
 .DS_Store
+Thumbs.db
